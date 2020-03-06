@@ -81,9 +81,7 @@ class WidgetBuilder:
         schema_type = get_schema_type(schema)
         widget_variant = self.get_widget_variant(schema_type, schema, ui_schema)
         widget_cls = self.widget_map[schema_type][widget_variant]
-
         widget = widget_cls(schema, ui_schema, self)
-
         default_state = get_widget_state(schema, state)
         if default_state is not None:
             widget.state = default_state
@@ -98,4 +96,7 @@ class WidgetBuilder:
         if "enum" in schema:
             default_variant = "enum"
 
-        return ui_schema.get('ui:widget', default_variant)
+        widget_variant = schema.get('ui:widget')
+        if widget_variant is None:
+            widget_variant = ui_schema.get('ui:widget', default_variant)
+        return widget_variant
