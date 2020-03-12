@@ -5,6 +5,7 @@ from jsonschema.validators import validator_for
 from . import widgets
 from .defaults import compute_defaults
 from typing import Dict, Any
+from PyQt5 import QtGui
 
 def get_widget_state(schema, state=None):
     """A JSON object. Either the state given in input if any, otherwise
@@ -51,14 +52,14 @@ class WidgetBuilder:
         self.widget_map = deepcopy(self.default_widget_map)
         self.validator_cls = validator_cls
 
-    def create_form(self, schema: dict, ui_schema: dict = {}, state=None, parent=None) -> widgets.SchemaWidgetMixin:
+    def create_form(self, schema: dict, ui_schema: dict = {}, state=None, parent=None, palette: QtGui.QPalette = None) -> widgets.SchemaWidgetMixin:
         validator_cls = self.validator_cls
         if validator_cls is None:
             validator_cls = validator_for(schema)
 
         validator_cls.check_schema(schema)
         validator = validator_cls(schema)
-        schema_widget = self.create_widget(schema, ui_schema, state)
+        schema_widget = self.create_widget(schema, ui_schema, state, palette=palette)
         form = widgets.FormWidget(schema_widget, parent)
 
         def validate(data):
@@ -77,11 +78,11 @@ class WidgetBuilder:
 
         return form
 
-    def create_widget(self, schema: dict, ui_schema: dict, state=None) -> widgets.SchemaWidgetMixin:
+    def create_widget(self, schema: dict, ui_schema: dict, state=None, palette: QtGui.QPalette = None) -> widgets.SchemaWidgetMixin:
         schema_type = get_schema_type(schema)
         widget_variant = self.get_widget_variant(schema_type, schema, ui_schema)
         widget_cls = self.widget_map[schema_type][widget_variant]
-        widget = widget_cls(schema, ui_schema, self)
+        widget = widget_cls(schema, ui_schema, self, palette=palette)
         default_state = get_widget_state(schema, state)
         if default_state is not None:
             widget.state = default_state

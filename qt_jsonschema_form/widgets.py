@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Dict, List, Optional, Tuple
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, QtGui
 
 from .signal import Signal
 from .utils import is_concrete_schema, iter_layout_widgets, state_property
@@ -13,12 +13,13 @@ class SchemaWidgetMixin:
     VALID_COLOUR = '#ffffff'
     INVALID_COLOUR = '#f6989d'
 
-    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', **kwargs):
+    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', palette: QtGui.QPalette = None, **kwargs):
         super().__init__(**kwargs)
 
         self.schema = schema
         self.ui_schema = ui_schema
         self.widget_builder = widget_builder
+        self._palette = palette
 
         self.on_changed.connect(lambda _: self.clear_error())
         self.configure()
@@ -43,12 +44,12 @@ class SchemaWidgetMixin:
         self._set_valid_state(None)
 
     def _set_valid_state(self, error: Exception = None):
-        palette = self.palette()
-        colour = QtGui.QColor()
-        colour.setNamedColor(
-            self.VALID_COLOUR if error is None else self.INVALID_COLOUR)
-        palette.setColor(self.backgroundRole(), colour)
-
+        palette = self._palette or self.palette()
+        if error:
+            palette = QtGui.QPalette(palette)
+            colour = QtGui.QColor()
+            colour.setNamedColor(self.INVALID_COLOUR)
+            palette.setColor(self.backgroundRole(), colour)
         self.setPalette(palette)
         self.setToolTip("" if error is None else error.message)  # TODO
 
@@ -475,7 +476,7 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
         # Create widget
         item_ui_schema = self.ui_schema.get("items", {})
         widget = self.widget_builder.create_widget(
-            item_schema, item_ui_schema, item_state)
+            item_schema, item_ui_schema, item_state, palette=self.palette())
         controls = ArrayControlsWidget()
 
         # Create row
@@ -526,7 +527,7 @@ class ObjectSchemaWidget(SchemaWidgetMixin, QtWidgets.QGroupBox):
 
     def populate_from_schema(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder'
                              ) -> Dict[str, QtWidgets.QWidget]:
-        layout = QtWidgets.QFormLayout()
+        layout = QtWidgets.QFormLayout(parent=self)
         self.setLayout(layout)
         layout.setAlignment(QtCore.Qt.AlignTop)
         self.setFlat(False)
@@ -543,7 +544,7 @@ class ObjectSchemaWidget(SchemaWidgetMixin, QtWidgets.QGroupBox):
         for name, sub_schema in schema['properties'].items():
             sub_ui_schema = ui_schema.get(name, {})
             widget = widget_builder.create_widget(
-                sub_schema, sub_ui_schema)  # TODO onchanged
+                sub_schema, sub_ui_schema, palette=self.palette())  # TODO onchanged
             widget.on_changed.connect(partial(self.widget_on_changed, name))
             label = sub_schema.get("title", name)
             label = QtWidgets.QLabel(label)
