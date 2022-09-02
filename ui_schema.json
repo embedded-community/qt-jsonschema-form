@@ -1,0 +1,12 @@
+{
+      "schema_path": {
+          "ui:widget": "filepath"
+      },
+      "sky_colour": {
+          "ui:widget": "colour"
+      },
+      "enum": {
+          "ui:widget": "enum"
+      }
+
+  }

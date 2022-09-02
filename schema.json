@@ -1,0 +1,79 @@
+{
+      "type": "object",
+      "title": "Number fields and widgets",
+      "properties": {
+          "schema_path": {
+              "title": "Schema path",
+              "type": "string"
+          },
+          "text": {
+              "type": "string",
+              "maxLength": 20,
+              "description": "sample description"
+          },
+          "integerRangeSteps": {
+              "title": "Integer range (by 10)",
+              "type": "integer",
+              "minimum": 55,
+              "maximum": 100,
+              "multipleOf": 10
+          },
+          "sky_colour": {
+              "type": "string"
+          },
+          "boolean": {
+              "type": "boolean"
+
+          },
+          "enum": {
+              "type": "boolean",
+              "enum": [true, false]
+
+          },
+          "names": {
+              "type": "array",
+              "items": [
+                  {
+                      "type": "string",
+                      "pattern": "[a-zA-Z-'s]+",
+                      "enum": [
+                          "Jack", "Jill"
+                      ]
+                  },
+                  {
+                      "type": "string",
+                      "pattern": "[a-zA-Z-'s]+",
+                      "enum": [
+                          "Alice", "Bob"
+                      ]
+                  }
+              ],
+              "additionalItems": {
+                  "type": "string"
+              }
+          },
+          "address_book": {
+              "type": "array",
+              "items": {
+                  "type": "object",
+                  "title": "Person",
+                  "properties": {
+                      "name": {
+                          "title": "Name",
+                          "type": "string"
+                      },
+                      "age": {
+                          "title": "Age",
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                      },
+                      "has_job": {
+                          "title": "has a job",
+                          "type": "boolean"
+                      }
+                  }
+              }
+          }
+      }
+  }

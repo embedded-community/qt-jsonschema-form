@@ -1,3 +1,5 @@
+import json
+import os
 import sys
 from json import dumps
 
@@ -5,79 +7,21 @@ from PySide6.QtWidgets import QApplication
 
 from qt_jsonschema_form import WidgetBuilder
 
+
+def load_json(filename):
+    with open(filename) as f:
+        return json.load(f)
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     builder = WidgetBuilder()
 
-    schema = {
-        "type": "object",
-        "title": "Number fields and widgets",
-        "properties": {
-            "schema_path": {
-                "title": "Schema path",
-                "type": "string"
-            },
-            "text": {
-                "type": "string",
-                "maxLength": 20
-            },
-            "integerRangeSteps": {
-                "title": "Integer range (by 10)",
-                "type": "integer",
-                "minimum": 55,
-                "maximum": 100,
-                "multipleOf": 10
-            },
-            "sky_colour": {
-                "type": "string"
-            },
-            "boolean": {
-                "type": "boolean",
+    filename = os.environ.get('SCHEMA', 'schema.json')
+    schema = load_json(filename)
+    ui_schema = load_json('ui_schema.json')
 
-            },
-            "enum": {
-                "type": "boolean",
-                "enum": [True, False]
-
-            },
-            "names": {
-                "type": "array",
-                "items": [
-                    {
-                        "type": "string",
-                        "pattern": "[a-zA-Z\-'\s]+",
-                        "enum": [
-                            "Jack", "Jill"
-                        ]
-                    },
-                    {
-                        "type": "string",
-                        "pattern": "[a-zA-Z\-'\s]+",
-                        "enum": [
-                            "Alice", "Bob"
-                        ]
-                    },
-                ],
-                "additionalItems": {
-                    "type": "number"
-                },
-            }
-        }
-    }
-
-    ui_schema = {
-        "schema_path": {
-            "ui:widget": "filepath"
-        },
-        "sky_colour": {
-            "ui:widget": "colour"
-        },
-        "enum": {
-            "ui:widget": "enum",
-        }
-
-    }
     form = builder.create_form(schema, ui_schema)
     form.widget.state = {
         "schema_path": "some_file.py",
