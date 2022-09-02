@@ -5,7 +5,7 @@ from jsonschema.validators import validator_for
 from . import widgets
 from .defaults import compute_defaults
 from typing import Dict, Any
-from PyQt5 import QtGui
+from PySide6 import QtGui
 
 
 def get_widget_state(schema, state=None):

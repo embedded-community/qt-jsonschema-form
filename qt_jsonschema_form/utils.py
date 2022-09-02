@@ -1,7 +1,7 @@
 from functools import wraps
 from typing import Iterator
 
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 
 class StateProperty(property):
