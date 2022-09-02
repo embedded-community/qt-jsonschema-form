@@ -1,12 +1,12 @@
 import sys
 from json import dumps
 
-from PyQt5 import QtWidgets
+from PySide6.QtWidgets import QApplication
 
 from qt_jsonschema_form import WidgetBuilder
 
 if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
+    app = QApplication(sys.argv)
 
     builder = WidgetBuilder()
 
