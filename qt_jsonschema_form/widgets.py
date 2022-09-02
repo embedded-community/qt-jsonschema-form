@@ -1,11 +1,10 @@
 from functools import partial
-from typing import List
-from typing import Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple
 
-from PySide6 import QtWidgets, QtCore, QtGui
+from PySide6 import QtCore, QtWidgets, QtCore, QtGui
 
 from .signal import Signal
-from .utils import iter_layout_widgets, state_property, is_concrete_schema
+from .utils import is_concrete_schema, iter_layout_widgets, state_property
 
 
 class SchemaWidgetMixin:
@@ -14,12 +13,13 @@ class SchemaWidgetMixin:
     VALID_COLOUR = '#ffffff'
     INVALID_COLOUR = '#f6989d'
 
-    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', **kwargs):
+    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', palette: QtGui.QPalette = None, **kwargs):
         super().__init__(**kwargs)
 
         self.schema = schema
         self.ui_schema = ui_schema
         self.widget_builder = widget_builder
+        self._palette = palette
 
         self.on_changed.connect(lambda _: self.clear_error())
         self.configure()
@@ -44,23 +44,32 @@ class SchemaWidgetMixin:
         self._set_valid_state(None)
 
     def _set_valid_state(self, error: Exception = None):
-        palette = self.palette()
-        colour = QtGui.QColor()
-        colour.setNamedColor(self.VALID_COLOUR if error is None else self.INVALID_COLOUR)
-        palette.setColor(self.backgroundRole(), colour)
-
+        palette = self._palette or self.palette()
+        if error:
+            palette = QtGui.QPalette(palette)
+            colour = QtGui.QColor()
+            colour.setNamedColor(self.INVALID_COLOUR)
+            palette.setColor(self.backgroundRole(), colour)
         self.setPalette(palette)
         self.setToolTip("" if error is None else error.message)  # TODO
 
 
 class TextSchemaWidget(SchemaWidgetMixin, QtWidgets.QLineEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.maxLength = self.schema.get("maxLength")
 
     def configure(self):
         self.textChanged.connect(self.on_changed.emit)
 
     @state_property
     def state(self) -> str:
-        return str(self.text())
+        state = str(self.text())
+        if self.maxLength is not None and len(state) > self.maxLength:
+            state = state[:self.maxLength]
+            self.setText(state)
+            # Stripping the text to limit to the admitted length
+        return state
 
     @state.setter
     def state(self, state: str):
@@ -76,10 +85,18 @@ class PasswordWidget(TextSchemaWidget):
 
 
 class TextAreaSchemaWidget(SchemaWidgetMixin, QtWidgets.QTextEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.maxLength = self.schema.get("maxLength")
 
     @state_property
     def state(self) -> str:
-        return str(self.toPlainText())
+        state = str(self.toPlainText())
+        if self.maxLength is not None and len(state) > self.maxLength:
+            state = state[:self.maxLength]
+            self.setPlainText(state)
+            # Stripping the text to limit to the admitted length
+        return state
 
     @state.setter
     def state(self, state: str):
@@ -97,6 +114,8 @@ class CheckboxSchemaWidget(SchemaWidgetMixin, QtWidgets.QCheckBox):
 
     @state.setter
     def state(self, checked: bool):
+        if not isinstance(checked, bool):
+            print(f"«{checked}» should be a bool and is a {type(checked)}")
         self.setChecked(checked)
 
     def configure(self):
@@ -115,6 +134,24 @@ class SpinDoubleSchemaWidget(SchemaWidgetMixin, QtWidgets.QDoubleSpinBox):
 
     def configure(self):
         self.valueChanged.connect(self.on_changed.emit)
+        if "maximum" in self.schema:
+            if "exclusiveMaximum" in self.schema:
+                self.setMaximum(
+                    min(self.schema["maximum"], self.schema["exclusiveMaximum"]))
+            else:
+                self.setMaximum(self.schema["maximum"])
+        elif "exclusiveMaximum" in self.schema:
+            self.setMaximum(self.schema["exclusiveMaximum"])
+        if "minimum" in self.schema:
+            if "exclusiveMinimum" in self.schema:
+                self.setMinimum(
+                    min(self.schema["minimum"], self.schema["exclusiveMinimum"]))
+            else:
+                self.setMinimum(self.schema["minimum"])
+        elif "exclusiveMinimum" in self.schema:
+            self.setMinimum(self.schema["exclusiveMinimum"])
+        if "multipleOf" in self.schema:
+            self.setSingleStep(self.schema["multipleOf"])
 
 
 class SpinSchemaWidget(SchemaWidgetMixin, QtWidgets.QSpinBox):
@@ -129,12 +166,30 @@ class SpinSchemaWidget(SchemaWidgetMixin, QtWidgets.QSpinBox):
 
     def configure(self):
         self.valueChanged.connect(self.on_changed.emit)
+        if "maximum" in self.schema:
+            if "exclusiveMaximum" in self.schema:
+                self.setMaximum(
+                    min(self.schema["maximum"], self.schema["exclusiveMaximum"]-1))
+            else:
+                self.setMaximum(self.schema["maximum"])
+        elif "exclusiveMaximum" in self.schema:
+            self.setMaximum(self.schema["exclusiveMaximum"]-1)
+        if "minimum" in self.schema:
+            if "exclusiveMinimum" in self.schema:
+                self.setMinimum(
+                    min(self.schema["minimum"], self.schema["exclusiveMinimum"]+1))
+            else:
+                self.setMinimum(self.schema["minimum"])
+        elif "exclusiveMinimum" in self.schema:
+            self.setMinimum(self.schema["exclusiveMinimum"]+1)
+        if "multipleOf" in self.schema:
+            self.setSingleStep(self.schema["multipleOf"])
 
 
 class IntegerRangeSchemaWidget(SchemaWidgetMixin, QtWidgets.QSlider):
 
-    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder'):
-        super().__init__(schema, ui_schema, widget_builder, orientation=QtCore.Qt.Horizontal)
+    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', *args, **kwargs):
+        super().__init__(schema, ui_schema, widget_builder, orientation=QtCore.Qt.Horizontal, *args, **kwargs)
 
     @state_property
     def state(self) -> int:
@@ -226,8 +281,8 @@ class ColorSchemaWidget(SchemaWidgetMixin, QColorButton):
 
 class FilepathSchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
 
-    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder'):
-        super().__init__(schema, ui_schema, widget_builder)
+    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', *args, **kwargs):
+        super().__init__(schema, ui_schema, widget_builder, *args, **kwargs)
 
         layout = QtWidgets.QHBoxLayout()
         self.setLayout(layout)
@@ -253,13 +308,19 @@ class FilepathSchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
         self.path_widget.setText(state)
 
 
+class DirectorypathSchemaWidget(FilepathSchemaWidget):
+    def _on_clicked(self, flag):
+        path = QtWidgets.QFileDialog.getExistingDirectory()
+        self.path_widget.setText(path)
+
+
 class ArrayControlsWidget(QtWidgets.QWidget):
     on_delete = QtCore.Signal()
     on_move_up = QtCore.Signal()
     on_move_down = QtCore.Signal()
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         style = self.style()
 
@@ -268,11 +329,13 @@ class ArrayControlsWidget(QtWidgets.QWidget):
         self.up_button.clicked.connect(lambda _: self.on_move_up.emit())
 
         self.delete_button = QtWidgets.QPushButton()
-        self.delete_button.setIcon(style.standardIcon(QtWidgets.QStyle.SP_DialogCancelButton))
+        self.delete_button.setIcon(style.standardIcon(
+            QtWidgets.QStyle.SP_DialogCancelButton))
         self.delete_button.clicked.connect(lambda _: self.on_delete.emit())
 
         self.down_button = QtWidgets.QPushButton()
-        self.down_button.setIcon(style.standardIcon(QtWidgets.QStyle.SP_ArrowDown))
+        self.down_button.setIcon(
+            style.standardIcon(QtWidgets.QStyle.SP_ArrowDown))
         self.down_button.clicked.connect(lambda _: self.on_move_down.emit())
 
         group_layout = QtWidgets.QHBoxLayout()
@@ -286,8 +349,8 @@ class ArrayControlsWidget(QtWidgets.QWidget):
 
 class ArrayRowWidget(QtWidgets.QWidget):
 
-    def __init__(self, widget: QtWidgets.QWidget, controls: ArrayControlsWidget):
-        super().__init__()
+    def __init__(self, widget: QtWidgets.QWidget, controls: ArrayControlsWidget, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         layout = QtWidgets.QHBoxLayout()
         layout.addWidget(widget)
@@ -327,7 +390,8 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
         style = self.style()
 
         self.add_button = QtWidgets.QPushButton()
-        self.add_button.setIcon(style.standardIcon(QtWidgets.QStyle.SP_FileIcon))
+        self.add_button.setIcon(
+            style.standardIcon(QtWidgets.QStyle.SP_FileIcon))
         self.add_button.clicked.connect(lambda _: self.add_item())
 
         self.array_layout = QtWidgets.QVBoxLayout()
@@ -350,7 +414,8 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
             if previous_row:
                 can_exchange_previous = previous_row.widget.schema == row.widget.schema
                 row.controls.up_button.setEnabled(can_exchange_previous)
-                previous_row.controls.down_button.setEnabled(can_exchange_previous)
+                previous_row.controls.down_button.setEnabled(
+                    can_exchange_previous)
             else:
                 row.controls.up_button.setEnabled(False)
             row.controls.delete_button.setEnabled(not self.is_fixed_schema(i))
@@ -410,7 +475,8 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
 
         # Create widget
         item_ui_schema = self.ui_schema.get("items", {})
-        widget = self.widget_builder.create_widget(item_schema, item_ui_schema, item_state)
+        widget = self.widget_builder.create_widget(
+            item_schema, item_ui_schema, item_state, palette=self.palette())
         controls = ArrayControlsWidget()
 
         # Create row
@@ -436,10 +502,11 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
 
 class ObjectSchemaWidget(SchemaWidgetMixin, QtWidgets.QGroupBox):
 
-    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder'):
-        super().__init__(schema, ui_schema, widget_builder)
+    def __init__(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder', *args, **kwargs):
+        super().__init__(schema, ui_schema, widget_builder, *args, **kwargs)
 
-        self.widgets = self.populate_from_schema(schema, ui_schema, widget_builder)
+        self.widgets = self.populate_from_schema(
+            schema, ui_schema, widget_builder)
 
     @state_property
     def state(self) -> dict:
@@ -460,7 +527,7 @@ class ObjectSchemaWidget(SchemaWidgetMixin, QtWidgets.QGroupBox):
 
     def populate_from_schema(self, schema: dict, ui_schema: dict, widget_builder: 'WidgetBuilder'
                              ) -> Dict[str, QtWidgets.QWidget]:
-        layout = QtWidgets.QFormLayout()
+        layout = QtWidgets.QFormLayout(parent=self)
         self.setLayout(layout)
         layout.setAlignment(QtCore.Qt.AlignTop)
         self.setFlat(False)
@@ -476,9 +543,13 @@ class ObjectSchemaWidget(SchemaWidgetMixin, QtWidgets.QGroupBox):
 
         for name, sub_schema in schema['properties'].items():
             sub_ui_schema = ui_schema.get(name, {})
-            widget = widget_builder.create_widget(sub_schema, sub_ui_schema)  # TODO onchanged
+            widget = widget_builder.create_widget(
+                sub_schema, sub_ui_schema, palette=self.palette())  # TODO onchanged
             widget.on_changed.connect(partial(self.widget_on_changed, name))
             label = sub_schema.get("title", name)
+            label = QtWidgets.QLabel(label)
+            if "description" in sub_schema:
+                label.setToolTip(sub_schema["description"])
             layout.addRow(label, widget)
             widgets[name] = widget
 
@@ -495,6 +566,7 @@ class EnumSchemaWidget(SchemaWidgetMixin, QtWidgets.QComboBox):
     def state(self, value):
         index = self.findData(value)
         if index == -1:
+            print(f"Value {value} not found in the combo box.")
             raise ValueError(value)
         self.setCurrentIndex(index)
 
@@ -504,18 +576,19 @@ class EnumSchemaWidget(SchemaWidgetMixin, QtWidgets.QComboBox):
             self.addItem(str(opt))
             self.setItemData(i, opt)
 
-        self.currentIndexChanged.connect(lambda _: self.on_changed.emit(self.state))
+        self.currentIndexChanged.connect(
+            lambda _: self.on_changed.emit(self.state))
 
     def _index_changed(self, index: int):
         self.on_changed.emit(self.state)
 
 
-class FormWidget(QtWidgets.QWidget):
+class FormWidget(QtWidgets.QDialog):
 
-    def __init__(self, widget: SchemaWidgetMixin):
-        super().__init__()
-        layout = QtWidgets.QVBoxLayout()
-        self.setLayout(layout)
+    def __init__(self, widget: SchemaWidgetMixin, parent=None, *args, **kwargs):
+        super().__init__(*args, parent=parent, **kwargs)
+        self.layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.layout)
 
         self.error_widget = QtWidgets.QGroupBox()
         self.error_widget.setTitle("Errors")
@@ -523,8 +596,8 @@ class FormWidget(QtWidgets.QWidget):
         self.error_widget.setLayout(self.error_layout)
         self.error_widget.hide()
 
-        layout.addWidget(self.error_widget)
-        layout.addWidget(widget)
+        self.layout.addWidget(self.error_widget)
+        self.layout.addWidget(widget)
 
         self.widget = widget
 
@@ -539,7 +612,8 @@ class FormWidget(QtWidgets.QWidget):
             item.widget().deleteLater()
 
         for err in errors:
-            widget = QtWidgets.QLabel(f"<b>.{'.'.join(err.path)}</b> {err.message}")
+            widget = QtWidgets.QLabel(
+                f"<b>.{'.'.join(err.path)}</b> {err.message}")
             layout.addWidget(widget)
 
     def clear_errors(self):

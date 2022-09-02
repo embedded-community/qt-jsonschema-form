@@ -1,11 +1,18 @@
 from copy import deepcopy
 
 from jsonschema.validators import validator_for
+
 from . import widgets
 from .defaults import compute_defaults
+from typing import Dict, Any
+from PyQt5 import QtGui
 
 
 def get_widget_state(schema, state=None):
+    """A JSON object. Either the state given in input if any, otherwise
+    the default value satisfying the current type.
+
+    """
     if state is None:
         return compute_defaults(schema)
     return state
@@ -21,7 +28,7 @@ class WidgetBuilder:
         "object": {"object": widgets.ObjectSchemaWidget, "enum": widgets.EnumSchemaWidget},
         "number": {"spin": widgets.SpinDoubleSchemaWidget, "text": widgets.TextSchemaWidget, "enum": widgets.EnumSchemaWidget},
         "string": {"textarea": widgets.TextAreaSchemaWidget, "text": widgets.TextSchemaWidget, "password": widgets.PasswordWidget,
-                   "filepath": widgets.FilepathSchemaWidget, "colour": widgets.ColorSchemaWidget, "enum": widgets.EnumSchemaWidget},
+                   "filepath": widgets.FilepathSchemaWidget, "dirpath": widgets.DirectorypathSchemaWidget, "colour": widgets.ColorSchemaWidget, "enum": widgets.EnumSchemaWidget},
         "integer": {"spin": widgets.SpinSchemaWidget, "text": widgets.TextSchemaWidget, "range": widgets.IntegerRangeSchemaWidget,
                     "enum": widgets.EnumSchemaWidget},
         "array": {"array": widgets.ArraySchemaWidget, "enum": widgets.EnumSchemaWidget}
@@ -41,20 +48,24 @@ class WidgetBuilder:
     }
 
     def __init__(self, validator_cls=None):
+        """validator_cls -- A validator, as in jsonschema library. Schemas are
+        supposed to be valid for it."""
         self.widget_map = deepcopy(self.default_widget_map)
         self.validator_cls = validator_cls
 
-    def create_form(self, schema: dict, ui_schema: dict, state=None) -> widgets.SchemaWidgetMixin:
+    def create_form(self, schema: dict, ui_schema: dict = {}, state=None, parent=None, palette: QtGui.QPalette = None) -> widgets.SchemaWidgetMixin:
         validator_cls = self.validator_cls
         if validator_cls is None:
             validator_cls = validator_for(schema)
 
         validator_cls.check_schema(schema)
         validator = validator_cls(schema)
-        schema_widget = self.create_widget(schema, ui_schema, state)
-        form = widgets.FormWidget(schema_widget)
+        schema_widget = self.create_widget(schema, ui_schema, state, palette=palette)
+        form = widgets.FormWidget(schema_widget, parent)
 
         def validate(data):
+            """Show the error widget iff there are errors, and the error messages
+            in it."""
             form.clear_errors()
             errors = [*validator.iter_errors(data)]
 
@@ -68,9 +79,17 @@ class WidgetBuilder:
 
         return form
 
-    def create_widget(self, schema: dict, ui_schema: dict, state=None) -> widgets.SchemaWidgetMixin:
+    def create_widget(self, schema: dict, ui_schema: dict, state=None, palette: QtGui.QPalette = None) -> widgets.SchemaWidgetMixin:
         schema_type = get_schema_type(schema)
+        widget_variant = self.get_widget_variant(schema_type, schema, ui_schema)
+        widget_cls = self.widget_map[schema_type][widget_variant]
+        widget = widget_cls(schema, ui_schema, self, palette=palette)
+        default_state = get_widget_state(schema, state)
+        if default_state is not None:
+            widget.state = default_state
+        return widget
 
+    def get_widget_variant(self, schema_type: str, schema: Dict[str, Any], ui_schema: Dict[str, Any]) -> str:
         try:
             default_variant = self.widget_variant_modifiers[schema_type](schema)
         except KeyError:
@@ -79,12 +98,7 @@ class WidgetBuilder:
         if "enum" in schema:
             default_variant = "enum"
 
-        widget_variant = ui_schema.get('ui:widget', default_variant)
-        widget_cls = self.widget_map[schema_type][widget_variant]
-
-        widget = widget_cls(schema, ui_schema, self)
-
-        default_state = get_widget_state(schema, state)
-        if default_state is not None:
-            widget.state = default_state
-        return widget
+        widget_variant = schema.get('ui:widget')
+        if widget_variant is None:
+            widget_variant = ui_schema.get('ui:widget', default_variant)
+        return widget_variant
