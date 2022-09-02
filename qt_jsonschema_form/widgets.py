@@ -390,6 +390,7 @@ class ArraySchemaWidget(SchemaWidgetMixin, QtWidgets.QWidget):
         style = self.style()
 
         self.add_button = QtWidgets.QPushButton()
+        self.add_button.setText('Insert')
         self.add_button.setIcon(
             style.standardIcon(QtWidgets.QStyle.SP_FileIcon))
         self.add_button.clicked.connect(lambda _: self.add_item())
